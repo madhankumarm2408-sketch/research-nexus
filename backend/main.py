@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -62,3 +62,10 @@ def search_papers(q: str=""):
     ]
 
     return {"results": matches}
+
+@app.get("/papers/{paper_id}")
+def get_paper(paper_id:str):
+    for paper in MOCK_PAPERS:
+        if paper["paper_id"] == paper_id:
+            return paper
+    raise HTTPException(status_code=404, detail="Paper not found")
