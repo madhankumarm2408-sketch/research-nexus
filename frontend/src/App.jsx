@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
@@ -6,7 +6,14 @@ import './App.css'
 
 function App() {
   const [count, setCount] = useState(0)
+  const [ message, setMessage ] = useState('Loading');
 
+  useEffect(() => {
+    fetch("http://localhost:8000/")
+      .then((res) => res.json())
+      .then((data) => setMessage(data.message))
+      .catch((err) => setMessage("Error: " + err.message));
+  }, []);
   return (
     <>
       <section id="center">
@@ -20,6 +27,7 @@ function App() {
           <p>
             Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
           </p>
+             <p>Backend says: {message}</p>
         </div>
         <button
           type="button"
