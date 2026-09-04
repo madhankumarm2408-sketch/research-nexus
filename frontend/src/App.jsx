@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
@@ -6,36 +6,55 @@ import './App.css'
 
 function App() {
   const [count, setCount] = useState(0)
-  const [ message, setMessage ] = useState('Loading');
+  const [ query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [selectedPaper, setSelectedPaper] = useState(null);
+  const [concepts, setConcepts] = useState([]);
 
-  useEffect(() => {
-    fetch("http://localhost:8000/")
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch((err) => setMessage("Error: " + err.message));
-  }, []);
+  async function handleSearch(){
+    const res = await fetch(`http://localhost:8000/search?q=${query}`);
+    const data = await res.json();
+    setResults(data.results);
+  }
+  async function handleSelectedPaper(paper){
+    setSelectedPaper(paper);
+    const res = await fetch(`http://localhost:8000/analyze/${paper.paper_id}`);
+    const data = await res.json();
+    setConcepts(data.concepts);
+    
+  }
   return (
     <>
       <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-             <p>Backend says: {message}</p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+        <h1> Research Nexus</h1>
+
+        <input type="text" value={query}
+               onChange={(e) => setQuery(e.target.value)}
+               placeholder="Search papers..."
+        />
+        <button onClick={handleSearch}>Search</button>
+        
+        <ul>
+          {results.map((paper) =>(
+            <li key={paper.paper_id} onClick={() => handleSelectedPaper(paper)} style={{cursor:"pointer"}}>
+              <strong>{paper.title}</strong> ({paper.publication_year})
+            </li>
+          ))}
+        </ul>
+       {selectedPaper && (
+          <div>
+            <h2>{selectedPaper.title}</h2>
+            <p>{selectedPaper.abstract}</p>
+            <h3>Extracted Concepts ({selectedPaper.full_text_available ? "full text" : "abstract only"})</h3>
+            <ul>
+              {concepts.map((c, i) => (
+                <li key={i}>
+                  <strong>{c.concept_type}:</strong> {c.concept_name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )} 
       </section>
 
       <div className="ticks"></div>
