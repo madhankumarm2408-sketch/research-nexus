@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import ReactFlow, { Background, Controls } from 'reactflow'
+import 'reactflow/dist/style.css'
+import { getLayoutedElements } from './layout.js'
 import './App.css'
 
 function App() {
@@ -10,7 +10,30 @@ function App() {
   const [results, setResults] = useState([]);
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [concepts, setConcepts] = useState([]);
+  const [graphNodes, setGraphNodes] = useState([]);
+  const [graphEdges, setGraphEdges] = useState([]);
 
+  async function loadGraph(){
+    const res = await fetch("http://localhost:8000/graph");
+    const data = await res.json();
+
+    const rfNodes = data.nodes.map((n) =>({
+      id: n.id,
+      data: { label: n.label },
+      position: { x: 0, y: 0 },
+      style: n.node_type === "paper" ? { background: "#cce5ff" } : { background: "#d4edda"},
+    }));
+    const rfEdges = data.edges.map((e, i) => ({
+    id: `e${i}`,
+    source: e.source,
+    target: e.target,
+  }));
+
+  const layouted = getLayoutedElements(rfNodes, rfEdges);
+  setGraphNodes(layouted.nodes);
+  setGraphEdges(layouted.edges);
+
+  }
   async function handleSearch(){
     const res = await fetch(`http://localhost:8000/search?q=${query}`);
     const data = await res.json();
@@ -57,91 +80,15 @@ function App() {
         )} 
       </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      <div style = {{marginTop:"2rem"}}>
+        <button onClick={loadGraph}>Load Knowledge Graph</button>
+      </div>
+      <div style = {{height:"500px", border:"1px solid #444"}}>
+        <ReactFlow nodes={graphNodes} edges={graphEdges} fitView>
+          <Background />
+          <Controls />
+        </ReactFlow>
+      </div>
     </>
   )
 }
