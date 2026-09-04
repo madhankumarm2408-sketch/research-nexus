@@ -1,7 +1,23 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
+import spacy
+from spacy.matcher import PhraseMatcher
 app = FastAPI()
+nlp = spacy.load("en_core_web_sm")
+
+CONCEPT_VOCAB = {
+    "Model":["Transformer", "BERT", "RoBERTa","Vision Transformer", "GPT"],
+    "Method":["SelfAttention", "Pretraining","Fine-tuning", "Data Augmentation"],
+    "Task":["Machine Translation", "Language Modelling", "Image Classification", "Text Summarization"],
+    "Dataset":["WMT2014", "GLUE","ImageNet"],
+    "Metric":["BLEU Score", "Accuracy", "F1 Score"],
+}
+
+matcher =PhraseMatcher(nlp.vocab, attr="LOWER")
+for concept_type, terms in CONCEPT_VOCAB.items():
+    patterns = [nlp.make_doc(term) for term in terms]
+    matcher.add(concept_type, patterns)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
