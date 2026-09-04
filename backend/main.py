@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import spacy
 from spacy.matcher import PhraseMatcher
+import networkx as nx
+
 app = FastAPI()
 nlp = spacy.load("en_core_web_sm")
 
@@ -85,3 +87,67 @@ def get_paper(paper_id:str):
         if paper["paper_id"] == paper_id:
             return paper
     raise HTTPException(status_code=404, detail="Paper not found")
+
+@app.get("/analyze/{paper_id}")
+def analyze_paper(paper_id: str):
+    paper = None
+    for p in MOCK_PAPERS:
+        if p["paper_id"] == paper_id:
+            paper =p
+            break
+    if paper is None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    doc = nlp(paper["abstract"])
+    matches = matcher(doc)
+
+    concepts=[]
+    seen = set()
+    for match_id, start, end in matches:
+        concept_type = nlp.vocab.strings[match_id]
+        span = doc[start:end]
+        concept_name = span.text
+
+        key = (concept_type, concept_name.lower())
+        if key not in seen:
+            seen.add(key)
+            concepts.append({
+                "concept_type": concept_type,
+                "concept_name": concept_name
+            })
+        
+    analysis_type = "full_text" if paper["full_text_available"] else "abstract_only"
+
+    return{
+            "paper_id" : paper_id,
+            "analysis_type": analysis_type,
+            "concepts": concepts
+        }
+@app.get("/graph")
+def get_knowledge_graph():
+    G = nx.Graph()
+
+    for paper in MOCK_PAPERS:
+        paper_node_id = paper["paper_id"]
+        G.add_node(paper_node_id, label=paper["title"], node_type="paper")
+
+        doc = nlp(paper["abstract"])
+        matches = matcher(doc)
+
+        seen = set()
+        for match_id, start, end in matches:
+            concept_type = nlp.vocab.strings[match_id]
+            concept_name = doc[start:end].text
+            concept_node_id = f"concept:{concept_name.lower()}"
+
+            key = concept_name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+
+            G.add_node(concept_node_id, label=concept_name, node_type="concept", concept_type=concept_type)
+            G.add_edge(paper_node_id, concept_node_id, edge_type="semantic")
+    nodes = [{"id":n, **G.nodes[n]} for n in G.nodes]
+    edges = [{"source": u, "target":v, **G.edges[u,v]} for u,v in G.edges]
+
+    return {"nodes": nodes, "edges": edges}
