@@ -5,6 +5,12 @@ from spacy.matcher import PhraseMatcher
 import networkx as nx
 from itertools import combinations
 from collections import Counter
+import os
+from dotenv import load_dotenv
+from google import genai
+
+load_dotenv()
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_sm")
@@ -181,3 +187,29 @@ def detect_research_gaps():
     ]
 
     return{"gaps":gaps}
+
+@app.get("/summarize/{paper_id}")
+def summarize_paper(paper_id: str):
+    paper = None
+    for p in MOCK_PAPERS:
+        if p["paper_id"] == paper_id:
+            paper = p
+            break
+    if paper is None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    source_text = paper["abstract"]
+    source_type = "full_text" if paper["full_text_available"] else "abstract_only"
+
+    prompt = f"Summarize this research paper abstract in 4-5 plain-English sentences for a student doing a literature review:\n\n{source_text}"
+
+    response = gemini_client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt,
+    )
+
+    return{
+        "paper_id": paper_id,
+        "source_type": source_type,
+        "summary": response.text,
+    }
