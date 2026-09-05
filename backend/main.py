@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import spacy
 from spacy.matcher import PhraseMatcher
 import networkx as nx
+from itertools import combinations
+from collections import Counter
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_sm")
@@ -47,7 +49,7 @@ MOCK_PAPERS=[
         "title": "BERT: Pre-training of Deep Bidirectional Transformers",
         "authors": ["Devlin", "Chang", "Lee"],
         "publication_year": 2018,
-        "abstract": "BERT is designed to pre-train deep bidirectional representations from unlabeled text.",
+        "abstract": "BERT is designed to pre-train deep bidirectional representations from unlabeled text using self-attention layers built on the Transformer architecture. The resulting model achieves strong performance on language modeling and downstream fine-tuning tasks, evaluated on the GLUE benchmark using accuracy.",
         "doi": "10.48550/arXiv.1810.04805",
         "citation_count": 89211,
         "keywords": ["bert", "language modeling", "pretraining"],
@@ -59,7 +61,7 @@ MOCK_PAPERS=[
         "title": "RoBERTa: A Robustly Optimized BERT Pretraining Approach",
         "authors": ["Liu", "Ott", "Goyal"],
         "publication_year": 2019,
-        "abstract": "We find BERT was significantly undertrained and propose an improved recipe.",
+        "abstract": "We find BERT was significantly undertrained and propose RoBERTa, an improved pretraining recipe that removes the next-sentence prediction objective and trains on more data using self-attention. RoBERTa achieves stronger accuracy on language modeling benchmarks including GLUE.",
         "doi": "10.48550/arXiv.1907.11692",
         "citation_count": 22894,
         "keywords": ["roberta", "bert", "pretraining"],
@@ -151,3 +153,31 @@ def get_knowledge_graph():
     edges = [{"source": u, "target":v, **G.edges[u,v]} for u,v in G.edges]
 
     return {"nodes": nodes, "edges": edges}
+
+@app.get("/gaps")
+def detect_research_gaps():
+    paper_concepts = {}
+    
+    for paper in MOCK_PAPERS:
+        doc = nlp(paper["abstract"])
+        matches = matcher(doc)
+
+        concept_names = set()
+        for match_id, start, end in matches:
+            concept_names.add(doc[start:end].text.lower())
+       
+        
+        paper_concepts[paper["paper_id"]] = concept_names
+    
+    combo_counter = Counter()
+    for concepts in paper_concepts.values():
+        for pair in combinations(sorted(concepts),2):
+            combo_counter[pair] += 1
+    
+    gaps = [
+        {"concept_1":pair[0], "concept_2":pair[1], "paper_count":count}
+        for pair, count in combo_counter.items()
+        if count <= 2
+    ]
+
+    return{"gaps":gaps}
