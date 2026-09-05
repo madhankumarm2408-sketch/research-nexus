@@ -244,3 +244,35 @@ def research_evolution(concept_name: str):
     ]
 
     return {"concept": concept_name, "timeline": timeline}
+
+@app.get("/recommend/{paper_id}")
+def recommend_papers(paper_id: str):
+    paper_concepts = {}
+
+    for paper in MOCK_PAPERS:
+        doc = nlp(paper["abstract"])
+        matches = matcher(doc)
+        names = {doc[start:end].text.lower() for match_id, start, end in matches}
+        paper_concepts[paper["paper_id"]] = names
+
+    if paper_id not in paper_concepts:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    target_concepts = paper_concepts[paper_id]
+
+    recommendations = []
+    for other_id, other_concepts in paper_concepts.items():
+        if other_id == paper_id:
+            continue
+
+        shared = target_concepts & other_concepts
+        if shared:
+            recommendations.append({
+                "paper_id": other_id,
+                "shared_concepts": sorted(shared),
+                "score": len(shared),
+            })
+
+    recommendations.sort(key=lambda r: r["score"], reverse=True)
+
+    return {"paper_id": paper_id, "recommendations": recommendations}
