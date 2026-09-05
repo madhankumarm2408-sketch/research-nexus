@@ -213,3 +213,34 @@ def summarize_paper(paper_id: str):
         "source_type": source_type,
         "summary": response.text,
     }
+@app.get("/evolution/{concept_name}")
+def research_evolution(concept_name: str):
+    concept_query = concept_name.lower()
+    matching_papers = []
+
+    for paper in MOCK_PAPERS:
+        doc = nlp(paper["abstract"])
+        matches = matcher(doc)
+
+        found_names = {doc[start:end].text.lower() for match_id, start, end in matches}
+
+        if concept_query in found_names:
+            matching_papers.append(paper)
+
+    if not matching_papers:
+        return {"concept": concept_name, "timeline": []}
+
+    matching_papers.sort(key=lambda p: p["publication_year"])
+    earliest_year = matching_papers[0]["publication_year"]
+
+    timeline = [
+        {
+            "paper_id": p["paper_id"],
+            "title": p["title"],
+            "publication_year": p["publication_year"],
+            "is_earliest": p["publication_year"] == earliest_year,
+        }
+        for p in matching_papers
+    ]
+
+    return {"concept": concept_name, "timeline": timeline}
