@@ -60,6 +60,10 @@ for concept_type, terms in CONCEPT_VOCAB.items():
 db = SessionLocal()
 
 for paper_data in MOCK_PAPERS:
+    existing = db.query(Paper).filter(Paper.paper_id == paper_data["paper_id"]).first()
+    if existing:
+        continue
+
     paper = Paper(**paper_data)
     db.add(paper)
 

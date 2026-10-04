@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
+from datetime import datetime
 
 DATABASE_URL = "sqlite:///./research_nexus.db"
 
@@ -40,3 +41,12 @@ class PaperConcept(Base):
 
     paper = relationship("Paper", back_populates="concepts")
     concept = relationship("Concept", back_populates="papers")
+
+class User(Base):
+    __tablename__ = "users"
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, default="researcher")
+    registration_date = Column(String, default=lambda: datetime.utcnow().isoformat())

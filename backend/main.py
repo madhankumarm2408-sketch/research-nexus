@@ -9,6 +9,8 @@ import os
 from dotenv import load_dotenv
 from google import genai
 from database import SessionLocal, Paper, Concept, PaperConcept
+from auth import hash_password, verify_password, create_access_token
+from database import User
 
 load_dotenv()
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -254,4 +256,34 @@ def recommend_papers(paper_id: str, db=Depends(get_db)):
     recommendations.sort(key=lambda r: r["score"], reverse=True)
 
     return {"paper_id": paper_id, "recommendations": recommendations}
+    
+@app.post("/register")
+def register(name: str, email: str, password: str, db=Depends(get_db)):
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_user = User(
+        name=name,
+        email=email,
+        password_hash=hash_password(password),
+    )
+    db.add(new_user)
+    db.commit()
+
+    return {"message": "User registered successfully", "user_id": new_user.user_id}
+
+
+@app.post("/login")
+def login(email: str, password: str, db=Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+
+    if user is None or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token({"sub": user.email})
+
+    return {"access_token": token, "token_type": "bearer"}
+
+
     
