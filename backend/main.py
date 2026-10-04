@@ -286,4 +286,39 @@ def login(email: str, password: str, db=Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 
-    
+@app.get("/dashboard")
+def get_dashboard(db=Depends(get_db)):
+    total_papers = db.query(Paper).count()
+    total_concepts = db.query(Concept).count()
+    total_users = db.query(User).count()
+
+    top_cited = (
+        db.query(Paper)
+        .order_by(Paper.citation_count.desc())
+        .limit(5)
+        .all()
+    )
+    recent_papers = (
+        db.query(Paper)
+        .order_by(Paper.publication_year.desc())
+        .limit(5)
+        .all()
+    )
+
+    def summarize(p):
+        return {
+            "paper_id": p.paper_id,
+            "title": p.title,
+            "publication_year": p.publication_year,
+            "citation_count": p.citation_count,
+        }
+
+    return {
+        "stats": {
+            "total_papers": total_papers,
+            "total_concepts": total_concepts,
+            "total_users": total_users,
+        },
+        "top_cited_papers": [summarize(p) for p in top_cited],
+        "recently_published": [summarize(p) for p in recent_papers],
+    }
