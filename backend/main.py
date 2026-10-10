@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import spacy
-from spacy.matcher import PhraseMatcher
 import networkx as nx
 from itertools import combinations
 from collections import Counter
@@ -11,6 +10,11 @@ from google import genai
 from database import SessionLocal, Paper, Concept, PaperConcept
 from auth import hash_password, verify_password, create_access_token
 from database import User
+import time
+from sqlalchemy import func
+from arxiv_client import fetch_arxiv
+from vocab import build_matcher
+from extraction import store_concepts
 
 load_dotenv()
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -18,18 +22,7 @@ gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 app = FastAPI()
 nlp = spacy.load("en_core_web_sm")
 
-CONCEPT_VOCAB = {
-    "Model": ["Transformer", "BERT", "RoBERTa", "Vision Transformer", "GPT"],
-    "Method": ["Self-Attention", "Pretraining", "Fine-tuning", "Data Augmentation"],
-    "Task": ["Machine Translation", "Language Modelling", "Image Classification", "Text Summarization"],
-    "Dataset": ["WMT2014", "GLUE", "ImageNet"],
-    "Metric": ["BLEU Score", "Accuracy", "F1 Score"],
-}
-
-matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-for concept_type, terms in CONCEPT_VOCAB.items():
-    patterns = [nlp.make_doc(term) for term in terms]
-    matcher.add(concept_type, patterns)
+matcher, ALIASES = build_matcher(nlp)
 
 app.add_middleware(
     CORSMiddleware,
@@ -322,3 +315,31 @@ def get_dashboard(db=Depends(get_db)):
         "top_cited_papers": [summarize(p) for p in top_cited],
         "recently_published": [summarize(p) for p in recent_papers],
     }
+
+last_arxiv_call =0.0
+@app.post("/import")
+def import_papers(q: str, max_results: int = 5, db=Depends(get_db)):
+    global last_arxiv_call
+    if time.time() - last_arxiv_call < 3:
+        raise HTTPException(status_code=429, detail="Please wait a few seconds between imports")
+    last_arxiv_call = time.time()
+
+    try:
+        fetched = fetch_arxiv(q, max_results)
+    except Exception as e:
+        print("arXiv fetch failed:", repr(e))
+        raise HTTPException(status_code=502, detail="Could not reach arXiv, try again shortly")
+
+    added = 0
+    for data in fetched:
+        if db.query(Paper).filter(Paper.paper_id == data["paper_id"]).first():
+            continue
+
+        db.add(Paper(**data))
+        db.flush()
+        store_concepts(db, data["paper_id"], data["abstract"], nlp, matcher, ALIASES)
+        added += 1
+
+    db.commit()
+
+    return {"fetched": len(fetched), "added": added, "skipped": len(fetched) - added}
