@@ -122,16 +122,31 @@ def analyze_paper(paper_id: str, db=Depends(get_db)):
 
 
 @app.get("/graph")
-def get_knowledge_graph(db=Depends(get_db)):
+def get_knowledge_graph(q: str = "", db=Depends(get_db)):
     G = nx.Graph()
 
-    papers = db.query(Paper).all()
+    paper_query = db.query(Paper)
+    if q:
+        pattern = f"%{q.lower()}%"
+        paper_query = paper_query.filter(
+            Paper.title.ilike(pattern)
+            | Paper.abstract.ilike(pattern)
+            | Paper.keywords.ilike(pattern)
+        )
+    papers = paper_query.all()
+    paper_ids = [p.paper_id for p in papers]
+
     for paper in papers:
         G.add_node(paper.paper_id, label=paper.title, node_type="paper")
 
-    links = db.query(PaperConcept).all()
+    links = db.query(PaperConcept).filter(PaperConcept.paper_id.in_(paper_ids)).all()
+    papers_per_concept = Counter(link.concept_id for link in links)
+
     for link in links:
+        if link.concept.concept_type == "Keyphrase" and papers_per_concept[link.concept_id] < 2:
+            continue
         concept_node_id = f"concept:{link.concept.concept_name.lower()}"
+        
 
         if not G.has_node(concept_node_id):
             G.add_node(
@@ -148,13 +163,14 @@ def get_knowledge_graph(db=Depends(get_db)):
 
     return {"nodes": nodes, "edges": edges}
 
-
 @app.get("/gaps")
 def detect_research_gaps(db=Depends(get_db)):
     links = db.query(PaperConcept).all()
 
     paper_concepts = {}
     for link in links:
+        if link.concept.concept_type == "Keyphrase":
+            continue
         name = link.concept.concept_name.lower()
         paper_concepts.setdefault(link.paper_id, set()).add(name)
 
@@ -229,6 +245,8 @@ def recommend_papers(paper_id: str, db=Depends(get_db)):
     links = db.query(PaperConcept).all()
     paper_concepts = {}
     for link in links:
+        if link.concept.concept_type == "Keyphrase":
+            continue
         name = link.concept.concept_name.lower()
         paper_concepts.setdefault(link.paper_id, set()).add(name)
 
@@ -337,7 +355,7 @@ def import_papers(q: str, max_results: int = 5, db=Depends(get_db)):
 
         db.add(Paper(**data))
         db.flush()
-        store_concepts(db, data["paper_id"], data["abstract"], nlp, matcher, ALIASES)
+        store_concepts(db, data["paper_id"], data["abstract"], data["keywords"], nlp, matcher, ALIASES)
         added += 1
 
     db.commit()

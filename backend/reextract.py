@@ -12,7 +12,7 @@ db.query(PaperConcept).delete()
 db.query(Concept).delete()
 
 for paper in db.query(Paper).all():
-    count = store_concepts(db, paper.paper_id, paper.abstract, nlp, matcher, aliases)
+    count = store_concepts(db, paper.paper_id, paper.abstract, paper.keywords, nlp, matcher, aliases)
     print(paper.paper_id, count, "concepts")
 
 db.commit()
