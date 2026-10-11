@@ -1,10 +1,11 @@
-from database import Base, engine, SessionLocal, Paper, Concept, PaperConcept
 import spacy
-from spacy.matcher import PhraseMatcher
+from database import Base, engine, SessionLocal, Paper
+from vocab import build_matcher
+from extraction import store_concepts
 
 Base.metadata.create_all(bind=engine)
 
-MOCK_PAPERS = [
+SEED_PAPERS = [
     {
         "paper_id": "p1",
         "title": "Attention Is All You Need",
@@ -43,51 +44,18 @@ MOCK_PAPERS = [
     },
 ]
 
-CONCEPT_VOCAB = {
-    "Model": ["Transformer", "BERT", "RoBERTa", "Vision Transformer", "GPT"],
-    "Method": ["Self-Attention", "Pretraining", "Fine-tuning", "Data Augmentation"],
-    "Task": ["Machine Translation", "Language Modelling", "Image Classification", "Text Summarization"],
-    "Dataset": ["WMT2014", "GLUE", "ImageNet"],
-    "Metric": ["BLEU Score", "Accuracy", "F1 Score"],
-}
-
 nlp = spacy.load("en_core_web_sm")
-matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-for concept_type, terms in CONCEPT_VOCAB.items():
-    patterns = [nlp.make_doc(term) for term in terms]
-    matcher.add(concept_type, patterns)
+matcher, aliases = build_matcher(nlp)
 
 db = SessionLocal()
 
-for paper_data in MOCK_PAPERS:
-    existing = db.query(Paper).filter(Paper.paper_id == paper_data["paper_id"]).first()
-    if existing:
+for data in SEED_PAPERS:
+    if db.query(Paper).filter(Paper.paper_id == data["paper_id"]).first():
         continue
 
-    paper = Paper(**paper_data)
-    db.add(paper)
-
-    doc = nlp(paper_data["abstract"])
-    matches = matcher(doc)
-
-    seen = set()
-    for match_id, start, end in matches:
-        concept_type = nlp.vocab.strings[match_id]
-        concept_name = doc[start:end].text
-        key = concept_name.lower()
-
-        if key in seen:
-            continue
-        seen.add(key)
-
-        concept = db.query(Concept).filter(Concept.concept_name == concept_name).first()
-        if concept is None:
-            concept = Concept(concept_name=concept_name, concept_type=concept_type)
-            db.add(concept)
-            db.flush()
-
-        link = PaperConcept(paper_id=paper_data["paper_id"], concept_id=concept.concept_id)
-        db.add(link)
+    db.add(Paper(**data))
+    db.flush()
+    store_concepts(db, data["paper_id"], data["abstract"], data["keywords"], nlp, matcher, aliases)
 
 db.commit()
 db.close()
