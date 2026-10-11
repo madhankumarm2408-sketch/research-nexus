@@ -1,9 +1,31 @@
 import re
+import time
 import httpx
 import xml.etree.ElementTree as ET
 
 ARXIV_URL = "https://export.arxiv.org/api/query"
 NS = {"atom": "http://www.w3.org/2005/Atom"}
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def get_with_retry(params, retries=3):
+    last_error = None
+
+    for attempt in range(retries):
+        try:
+            response = httpx.get(ARXIV_URL, params=params, timeout=20, follow_redirects=True)
+        except httpx.TransportError as e:
+            last_error = e
+        else:
+            if response.status_code not in RETRYABLE_STATUS:
+                response.raise_for_status()
+                return response
+            last_error = RuntimeError(f"arXiv returned status {response.status_code}")
+
+        if attempt < retries - 1:
+            time.sleep(3 * (attempt + 1))
+
+    raise last_error
 
 
 def fetch_arxiv(query: str, max_results: int = 5):
@@ -13,8 +35,7 @@ def fetch_arxiv(query: str, max_results: int = 5):
         "max_results": max_results,
         "sortBy": "relevance",
     }
-    response = httpx.get(ARXIV_URL, params=params, timeout=20, follow_redirects=True)
-    response.raise_for_status()
+    response = get_with_retry(params)
 
     root = ET.fromstring(response.text)
     papers = []
@@ -40,4 +61,3 @@ def fetch_arxiv(query: str, max_results: int = 5):
         })
 
     return papers
-    

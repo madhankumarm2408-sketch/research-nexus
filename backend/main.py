@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 import spacy
 import networkx as nx
@@ -336,7 +336,7 @@ def get_dashboard(db=Depends(get_db)):
 
 last_arxiv_call =0.0
 @app.post("/import")
-def import_papers(q: str, max_results: int = 5, db=Depends(get_db)):
+def import_papers(q: str, max_results: int = Query(5, ge=1, le=25), db=Depends(get_db)):
     global last_arxiv_call
     if time.time() - last_arxiv_call < 3:
         raise HTTPException(status_code=429, detail="Please wait a few seconds between imports")
