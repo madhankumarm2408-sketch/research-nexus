@@ -112,7 +112,7 @@ def analyze_paper(paper_id: str, db=Depends(get_db)):
         for link in links
     ]
 
-    analysis_type = "full_text" if paper.full_text_available else "abstract_only"
+    analysis_type = "abstract_only"
 
     return {
         "paper_id": paper_id,
@@ -195,7 +195,7 @@ def summarize_paper(paper_id: str, db=Depends(get_db)):
     if paper is None:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    source_type = "full_text" if paper.full_text_available else "abstract_only"
+    source_type = "abstract_only"
     prompt = f"Summarize this research paper abstract in 4-5 plain-English sentences for a student doing a literature review:\n\n{paper.abstract}"
 
     response = gemini_client.models.generate_content(
