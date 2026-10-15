@@ -22,7 +22,14 @@ function App() {
   const [graphNodes, setGraphNodes] = useState([]);
   const [graphEdges, setGraphEdges] = useState([]);
   const [graphKey, setGraphKey] = useState(0);
-
+  const [topic, setTopic] = useState("");
+  const [gaps, setGaps] = useState(null);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState("");
+  const [showGaps, setShowGaps] = useState(false);
+  const [selectedGap, setSelectedGap] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [summarizingId, setSummarizingId] = useState(null);
   async function runSearch(q) {
     const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
     const data = await res.json();
@@ -32,6 +39,11 @@ function App() {
   }
 
   async function loadGraph(q) {
+    setSelectedGap(null);
+    setTopic(q);
+    setGaps(null);
+    setGapsError("");
+    setShowGaps(false);
     const res = await fetch(`${API}/graph?q=${encodeURIComponent(q)}`);
     const data = await res.json();
 
@@ -115,13 +127,92 @@ function App() {
     setConcepts(data.concepts);
     setAnalysisType(data.analysis_type);
   }
-
+  async function handleSummarize() {
+    const id = selectedPaper.paper_id;
+    setSummarizingId(id);
+    try {
+      const res = await fetch(`${API}/summarize/${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSummary({ id, text: data.summary, source: data.source_type });
+      } else {
+        setSummary({ id, text: "Could not generate a summary right now. Please try again in a moment." });
+      }
+    } catch {
+      setSummary({ id, text: "Could not reach the backend. Is uvicorn running?" });
+    } finally {
+      setSummarizingId(null);
+    }
+  }
+  async function handleFindGaps() {
+    setShowGaps(true);
+    setGapsLoading(true);
+    setGapsError("");
+    try {
+      const res = await fetch(`${API}/gaps?q=${encodeURIComponent(topic)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGaps(data.gaps);
+      } else {
+        setGapsError("Could not compute gaps right now. Please try again.");
+      }
+    } catch {
+      setGapsError("Could not reach the backend. Is uvicorn running?");
+    } finally {
+      setGapsLoading(false);
+    }
+  }
   const grouped = {};
   concepts.forEach((c) => {
     if (!grouped[c.concept_type]) grouped[c.concept_type] = [];
     grouped[c.concept_type].push(c.concept_name);
   });
+  const COLOR_A = "#ff9f43";
+  const COLOR_B = "#a78bfa";
+  const COLOR_BOTH = "#4ade80";
 
+  let displayNodes = graphNodes;
+  let displayEdges = graphEdges;
+
+  if (selectedGap) {
+    const idA = `concept:${selectedGap.concept_1.toLowerCase()}`;
+    const idB = `concept:${selectedGap.concept_2.toLowerCase()}`;
+
+    if (graphNodes.some((n) => n.id === idA || n.id === idB)) {
+      const papersA = new Set();
+      const papersB = new Set();
+      graphEdges.forEach((e) => {
+        if (e.target === idA) papersA.add(e.source);
+        if (e.target === idB) papersB.add(e.source);
+      });
+
+      displayNodes = graphNodes.map((n) => {
+        if (n.id === idA) {
+          return { ...n, style: { ...n.style, opacity: 1, border: `3px solid ${COLOR_A}` } };
+        }
+        if (n.id === idB) {
+          return { ...n, style: { ...n.style, opacity: 1, border: `3px solid ${COLOR_B}` } };
+        }
+        const inA = papersA.has(n.id);
+        const inB = papersB.has(n.id);
+        if (inA && inB) {
+          return { ...n, style: { ...n.style, opacity: 1, border: `3px solid ${COLOR_BOTH}` } };
+        }
+        if (inA) {
+          return { ...n, style: { ...n.style, opacity: 1, border: `2px solid ${COLOR_A}` } };
+        }
+        if (inB) {
+          return { ...n, style: { ...n.style, opacity: 1, border: `2px solid ${COLOR_B}` } };
+        }
+        return { ...n, style: { ...n.style, opacity: 0.2 } };
+      });
+
+      displayEdges = graphEdges.map((e) => {
+        const related = e.target === idA || e.target === idB;
+        return { ...e, style: { opacity: related ? 1 : 0.1 } };
+      });
+    }
+  }
   return (
     <>
       <header className="topbar">
@@ -140,6 +231,14 @@ function App() {
           <button className="btn" onClick={handleSearch}>Search stored</button>
           <button className="btn primary" onClick={handleFetch}>Fetch from arXiv</button>
           <button className="btn ghost" onClick={() => loadGraph("")}>Full graph</button>
+          <button
+            className="btn"
+            onClick={handleFindGaps}
+            disabled={!topic || gapsLoading}
+            title={topic ? "" : "Search a topic first"}
+          >
+            Find gaps
+          </button>
         </div>
       </header>
 
@@ -192,7 +291,23 @@ function App() {
                   Open on arXiv
                 </a>
               )}
-
+              <div className="summary-box">
+                <button
+                  className="btn"
+                  onClick={handleSummarize}
+                  disabled={summarizingId === selectedPaper.paper_id}
+                >
+                  {summarizingId === selectedPaper.paper_id ? "Summarizing..." : "Summarize with AI"}
+                </button>
+                {summary && summary.id === selectedPaper.paper_id && (
+                  <div className="summary-text">
+                    <p>{summary.text}</p>
+                    {summary.source && (
+                      <span className="badge">{summary.source.replace("_", " ")}</span>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="section-label" style={{ marginTop: "20px" }}>
                 Extracted concepts
                 {analysisType && <span className="badge">{analysisType.replace("_", " ")}</span>}
@@ -219,13 +334,65 @@ function App() {
             <span><i style={{ background: COLORS.domain }} />Domain</span>
             <span><i style={{ background: COLORS.concept }} />Concept</span>
           </div>
+                    {showGaps && (
+            <div className="gap-panel">
+              <div className="gap-header">
+                <strong>Candidate research gaps</strong>
+                <button className="gap-close" onClick={() => { setShowGaps(false); setSelectedGap(null); }}>×</button>
+              </div>
+              <div className="gap-topic">Topic: {topic}              <p className="gap-hint">
+                Click a pair to highlight it in the graph:{" "}
+                <span style={{ color: "#ff9f43" }}>first concept</span>,{" "}
+                <span style={{ color: "#a78bfa" }}>second concept</span>,{" "}
+                <span style={{ color: "#4ade80" }}>papers with both</span>.
+              </p></div>
+
+              {gapsLoading && <p className="empty">Analysing...</p>}
+              {gapsError && <p className="empty">{gapsError}</p>}
+
+              {!gapsLoading && !gapsError && gaps && gaps.length === 0 && (
+                <p className="empty">
+                  No candidate gaps found: not enough overlapping concepts in these
+                  papers yet. Try fetching more papers on this topic.
+                </p>
+              )}
+
+              {gaps && gaps.length > 0 && (
+                <ul className="gap-list">
+                  {gaps.map((g, i) => (
+                    <li
+                      key={i}
+                      className={"gap-item" + (selectedGap === g ? " active" : "")}
+                      onClick={() => setSelectedGap(selectedGap === g ? null : g)}
+                    >
+                      <div className="gap-pair">
+                        <span className={`chip chip-${g.type_1.toLowerCase()}`}>{g.concept_1}</span>
+                        <span className="gap-x">×</span>
+                        <span className={`chip chip-${g.type_2.toLowerCase()}`}>{g.concept_2}</span>
+                      </div>
+                      <div className="gap-stats">
+                        {g.papers_1} and {g.papers_2} papers use each;{" "}
+                        {g.together === 0 ? "none use both" : `${g.together} use both`}
+                        {" "}· score {g.score}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="gap-note">
+                Candidates drawn from the papers fetched for this topic, not claims
+                about the whole field.
+              </p>
+            </div>
+          )}
           {graphNodes.length === 0 && (
             <div className="graph-empty">
               Search or fetch a topic to see its knowledge graph.
             </div>
           )}
           <div className="graph-canvas">
-            <ReactFlow key={graphKey} nodes={graphNodes} edges={graphEdges} fitView>
+            <ReactFlow key={graphKey} nodes={displayNodes} edges={displayEdges} fitView>
               <Background color="#2a3040" gap={22} />
               <Controls />
             </ReactFlow>
