@@ -153,7 +153,3 @@ The `tests/` folder holds a JMeter plan for load-testing the database-backed end
 - The curated vocabulary is built for machine learning. Other fields rely on arXiv categories and keyphrases, which are less precise.
 - The graph shows semantic links only; there is no citation layer.
 - There is no workspace, and the web interface has no login screens (authentication is available through the API).
-
-## Licence
-
-Coursework project. [TO FILL: add a licence such as MIT, or state all rights reserved.]
